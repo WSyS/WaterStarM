@@ -12,6 +12,13 @@
 
 #include <hal/cpu_hal.h>
 
+// Enable additional FreeRTOS stack overflow diagnostics
+// (ESPHome/FreeRTOS will call vApplicationStackOverflowHook() when
+// CONFIG_CHECK_FOR_STACK_OVERFLOW is enabled).
+#include <freertos/task.h>
+#include "esphome/core/log.h"
+
+
 #ifdef USE_ARDUINO
 #include <Esp.h>
 #else
@@ -55,7 +62,20 @@ void arch_init() {
 }
 void IRAM_ATTR HOT arch_feed_wdt() { esp_task_wdt_reset(); }
 
+// FreeRTOS calls this hook when stack overflow is detected.
+// We log which task caused the overflow to allow targeted stack sizing.
+extern "C" void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
+  const char *name = pcTaskName ? pcTaskName : "(null)";
+  ESP_EARLY_LOGE("stack_overflow",
+                "vApplicationStackOverflowHook: task_handle=%p name=%s",
+                xTask, name);
+
+  // Restart after logging; aborting may lead to illegal instruction reports.
+  esphome::arch_restart();
+}
+
 uint8_t progmem_read_byte(const uint8_t *addr) { return *addr; }
+
 uint32_t arch_get_cpu_cycle_count() { return esp_cpu_get_cycle_count(); }
 uint32_t arch_get_cpu_freq_hz() {
   uint32_t freq = 0;
