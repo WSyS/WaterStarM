@@ -70,9 +70,8 @@ void Meter::handle_frame(wmbus_radio::Frame *frame) {
     // Use the ESPHome scheduler's main loop context via `defer()`.
     // (We also drop the captured lambda complexity by only deferring the
     // callback manager execution.)
-    this->defer([cb = &this->on_telegram_callback_manager, this]() {
+    this->defer([cb = &this->on_telegram_callback_manager]() {
       cb->call();
-      this->last_telegram = nullptr;
     });
 
     frame->mark_as_handled();

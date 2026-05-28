@@ -26,10 +26,10 @@ void Radio::setup() {
   // Pin to core 1 on dual-core to avoid WiFi ISR preemption on core 0.
 #if portNUM_PROCESSORS > 1
   ASSERT_SETUP(xTaskCreatePinnedToCore((TaskFunction_t)this->receiver_task, "radio_recv",
-                           32 * 1024, this, 24, &(this->receiver_task_handle_), 1));
+                           96 * 1024, this, 24, &(this->receiver_task_handle_), 1));
 #else
   ASSERT_SETUP(xTaskCreate((TaskFunction_t)this->receiver_task, "radio_recv",
-                           32 * 1024, this, 24, &(this->receiver_task_handle_)));
+                           96 * 1024, this, 24, &(this->receiver_task_handle_)));
 #endif
 
   ESP_LOGI(TAG, "Receiver task created [%p]", this->receiver_task_handle_);
@@ -123,11 +123,6 @@ void Radio::receive_frame() {
 
 void Radio::receiver_task(Radio *arg) {
   while (true) {
-    // Log stack watermark occasionally to identify the task that overflows.
-    // (Enable/disable via logger level.)
-    const UBaseType_t watermark = uxTaskGetStackHighWaterMark(nullptr);
-    ESP_LOGD(TAG, "radio_recv watermark=%u words", watermark);
-
     arg->receive_frame();
   }
 }
