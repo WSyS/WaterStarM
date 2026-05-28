@@ -34,6 +34,15 @@ void Radio::setup() {
 
   ESP_LOGI(TAG, "Receiver task created [%p]", this->receiver_task_handle_);
 
+  // Initial stack headroom report (bytes remaining).
+  // High watermark decreases over time; overflow occurs when it hits ~0.
+  if (this->receiver_task_handle_ != nullptr) {
+    auto hw = uxTaskGetStackHighWaterMark(this->receiver_task_handle_);
+    ESP_LOGI(TAG, "Receiver task initial stack high-water mark: %lu words",
+             (unsigned long)hw);
+  }
+
+
   this->radio->attach_data_interrupt(Radio::wakeup_receiver_task_from_isr,
                                      &(this->receiver_task_handle_));
 }
@@ -122,10 +131,22 @@ void Radio::receive_frame() {
 }
 
 void Radio::receiver_task(Radio *arg) {
+  uint32_t last_log_ms = 0;
   while (true) {
     arg->receive_frame();
+
+    // Periodic stack headroom report to identify the shrinking headroom.
+    // This runs in the receiver task itself.
+    uint32_t now = millis();
+    if (arg->receiver_task_handle_ != nullptr && (now - last_log_ms) > 5000) {
+      last_log_ms = now;
+      auto hw = uxTaskGetStackHighWaterMark(arg->receiver_task_handle_);
+      ESP_LOGI(TAG, "Receiver task stack high-water mark: %lu words",
+               (unsigned long)hw);
+    }
   }
 }
+
 
 void Radio::add_frame_handler(std::function<void(Frame *)> &&callback) {
   this->handlers_.push_back(std::move(callback));
