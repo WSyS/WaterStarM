@@ -122,8 +122,15 @@ void Radio::receive_frame() {
 }
 
 void Radio::receiver_task(Radio *arg) {
-  while (true)
+  while (true) {
+    // Log stack watermark occasionally to identify the task that overflows.
+    // (Enable/disable via logger level.)
+    const UBaseType_t watermark = uxTaskGetStackHighWaterMark(nullptr);
+    if (watermark < 512) {
+      ESP_LOGE(TAG, "radio_recv stack low watermark=%u words", watermark);
+    }
     arg->receive_frame();
+  }
 }
 
 void Radio::add_frame_handler(std::function<void(Frame *)> &&callback) {
