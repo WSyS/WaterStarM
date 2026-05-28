@@ -70,13 +70,18 @@ void IRAM_ATTR HOT arch_feed_wdt() { esp_task_wdt_reset(); }
 // We log which task caused the overflow to allow targeted stack sizing.
 extern "C" void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
   const char *name = pcTaskName ? pcTaskName : "(null)";
-  ESP_EARLY_LOGE("stack_overflow",
-                "vApplicationStackOverflowHook: task_handle=%p name=%s",
-                xTask, name);
 
-  // Restart after logging; aborting may lead to illegal instruction reports.
+  // Use normal logging + a short delay so the message has time to reach the host
+  // before the reboot triggered by the overflow recovery.
+  ESP_LOGE("stack_overflow",
+           "vApplicationStackOverflowHook: task_handle=%p name=%s",
+           xTask, name);
+
+  delay(250);
+
   esphome::arch_restart();
 }
+
 
 uint8_t progmem_read_byte(const uint8_t *addr) { return *addr; }
 
