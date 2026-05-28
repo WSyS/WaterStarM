@@ -106,7 +106,16 @@ void loop_task(void *pv_params) {
 extern "C" void app_main() {
   esp32::setup_preferences();
   xTaskCreate(loop_task, "loopTask", 32768, nullptr, 1, &loop_task_handle);
+
+  if (loop_task_handle != nullptr) {
+    // Initial stack headroom for the main ESPHome loop task
+    // (high-water mark is measured in words remaining).
+    auto hw = uxTaskGetStackHighWaterMark(loop_task_handle);
+    ESP_LOGI("stack_overflow", "loopTask initial stack high-water mark: %lu words",
+             (unsigned long)hw);
+  }
 }
+
 #endif  // USE_ESP_IDF
 
 #ifdef USE_ARDUINO
