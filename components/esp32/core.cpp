@@ -45,7 +45,11 @@ void arch_restart() {
 }
 
 void arch_init() {
+  // Very early breadcrumb to verify this code path executes before any crash.
+  ESP_EARLY_LOGI("startup", "arch_init entered");
+
   // Enable the task watchdog only on the loop task (from which we're currently running)
+
 #if defined(USE_ESP_IDF)
   esp_task_wdt_add(nullptr);
   // Idle task watchdog is disabled on ESP-IDF
