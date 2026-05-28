@@ -26,10 +26,10 @@ void Radio::setup() {
   // Pin to core 1 on dual-core to avoid WiFi ISR preemption on core 0.
 #if portNUM_PROCESSORS > 1
   ASSERT_SETUP(xTaskCreatePinnedToCore((TaskFunction_t)this->receiver_task, "radio_recv",
-                           24 * 1024, this, 24, &(this->receiver_task_handle_), 1));
+                           32 * 1024, this, 24, &(this->receiver_task_handle_), 1));
 #else
   ASSERT_SETUP(xTaskCreate((TaskFunction_t)this->receiver_task, "radio_recv",
-                           24 * 1024, this, 24, &(this->receiver_task_handle_)));
+                           32 * 1024, this, 24, &(this->receiver_task_handle_)));
 #endif
 
   ESP_LOGI(TAG, "Receiver task created [%p]", this->receiver_task_handle_);

@@ -65,9 +65,11 @@ void Meter::handle_frame(wmbus_radio::Frame *frame) {
   if (id_match) {
     this->last_telegram = std::move(telegram);
     this->last_rssi_dbm_ = frame->rssi();
-    // Execute automations via a dedicated ESPHome component deferred context.
-    // The default defer() callback path can be stack-heavy when logging/formatting.
-    this->app->add_on_loop([this]() {
+    // Defer automations execution.
+    // NOTE: defer() may execute in a context with limited stack.
+    // If you still hit stack overflows, increase task stack sizes or reduce
+    // automation/logging complexity.
+    this->defer([this]() {
       this->on_telegram_callback_manager();
       this->last_telegram = nullptr;
     });
