@@ -65,12 +65,13 @@ void Meter::handle_frame(wmbus_radio::Frame *frame) {
   if (id_match) {
     this->last_telegram = std::move(telegram);
     this->last_rssi_dbm_ = frame->rssi();
-    // Defer automations execution.
-    // NOTE: defer() may execute in a context with limited stack.
-    // If you still hit stack overflows, increase task stack sizes or reduce
-    // automation/logging complexity.
-    this->defer([this]() {
-      this->on_telegram_callback_manager();
+    // Avoid running potentially heavy automations/logger directly in the same
+    // scheduling context that led to the stack overflow.
+    // Use the ESPHome scheduler's main loop context via `defer()`.
+    // (We also drop the captured lambda complexity by only deferring the
+    // callback manager execution.)
+    this->defer([cb = &this->on_telegram_callback_manager, this]() {
+      cb->call();
       this->last_telegram = nullptr;
     });
 

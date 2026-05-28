@@ -126,9 +126,8 @@ void Radio::receiver_task(Radio *arg) {
     // Log stack watermark occasionally to identify the task that overflows.
     // (Enable/disable via logger level.)
     const UBaseType_t watermark = uxTaskGetStackHighWaterMark(nullptr);
-    if (watermark < 512) {
-      ESP_LOGE(TAG, "radio_recv stack low watermark=%u words", watermark);
-    }
+    ESP_LOGD(TAG, "radio_recv watermark=%u words", watermark);
+
     arg->receive_frame();
   }
 }
