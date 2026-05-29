@@ -118,7 +118,8 @@ void loop_task(void *pv_params) {
 
 extern "C" void app_main() {
   esp32::setup_preferences();
-  xTaskCreate(loop_task, "loopTask", 65536, nullptr, 1, &loop_task_handle);
+  xTaskCreate(loop_task, "loopTask", 262144, nullptr, 1, &loop_task_handle);
+
 
   if (loop_task_handle != nullptr) {
     // Initial stack headroom for the main ESPHome loop task
