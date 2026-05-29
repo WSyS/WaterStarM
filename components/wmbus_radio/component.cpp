@@ -66,17 +66,6 @@ void Radio::setup() {
                                      &(this->receiver_task_handle_));
 }
 
-void Radio::wakeup_receiver_task_from_isr(TaskHandle_t *arg) {
-  if (arg == nullptr || *arg == nullptr)
-    return;
-
-  BaseType_t xHigherPriorityTaskWoken;
-  vTaskNotifyGiveFromISR(*arg, &xHigherPriorityTaskWoken);
-  portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-}
-
-
-
 void Radio::loop() {
   // Decoding/handler execution is handled exclusively in decode_task().
   // Keep this loop empty to avoid any potential double-ownership between
@@ -84,12 +73,6 @@ void Radio::loop() {
 }
 
 
-
-void Radio::wakeup_receiver_task_from_isr(TaskHandle_t *arg) {
-  BaseType_t xHigherPriorityTaskWoken;
-  vTaskNotifyGiveFromISR(*arg, &xHigherPriorityTaskWoken);
-  portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-}
 
 void Radio::decode_task(Radio *arg) {
   // Periodic stack watermark logging to identify which task overflows.
