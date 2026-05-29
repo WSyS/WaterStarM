@@ -108,11 +108,15 @@ void Radio::decode_task(Radio *arg) {
     const uint32_t now_ms = millis();
     if (now_ms - last_log_ms > 5000) {
       last_log_ms = now_ms;
-    ESP_LOGW(TAG,
-             "Stack watermark (words): receiver=%lu decoder=%lu; handlers=%zu",
-             (unsigned long)(arg->receiver_task_handle_ ? uxTaskGetStackHighWaterMark(arg->receiver_task_handle_) : 0),
-             (unsigned long)(arg->decode_task_handle_ ? uxTaskGetStackHighWaterMark(arg->decode_task_handle_) : 0),
-             arg->handlers_.size());
+    // Keep this log, but avoid the extra stack/memory pressure from calling
+    // uxTaskGetStackHighWaterMark repeatedly inside deep decoder contexts.
+    if (arg->decode_task_handle_ != nullptr) {
+      auto rx_hw = (arg->receiver_task_handle_ ? uxTaskGetStackHighWaterMark(arg->receiver_task_handle_) : 0);
+      auto dec_hw = uxTaskGetStackHighWaterMark(arg->decode_task_handle_);
+      ESP_LOGW(TAG,
+               "Stack watermark (words): receiver=%lu decoder=%lu; handlers=%zu",
+               (unsigned long)rx_hw, (unsigned long)dec_hw, arg->handlers_.size());
+    }
     }
   }
 }
