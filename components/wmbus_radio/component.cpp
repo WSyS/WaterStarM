@@ -85,6 +85,7 @@ void Radio::loop() {
 
 void Radio::decode_task(Radio *arg) {
   // Periodic stack watermark logging to identify which task overflows.
+  // Log quickly so we can see where we are right before/at the crash.
   uint32_t last_log_ms = 0;
 
   while (true) {
