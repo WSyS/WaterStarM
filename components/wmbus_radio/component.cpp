@@ -107,12 +107,11 @@ void Radio::decode_task(Radio *arg) {
     const uint32_t now_ms = millis();
     if (now_ms - last_log_ms > 5000) {
       last_log_ms = now_ms;
-      if (arg->decode_task_handle_ != nullptr) {
-        auto hw = uxTaskGetStackHighWaterMark(arg->decode_task_handle_);
-        ESP_LOGW(TAG,
-                 "Decoder stack high-water mark: %lu words; handlers=%zu",
-                 (unsigned long)hw, arg->handlers_.size());
-      }
+    ESP_LOGW(TAG,
+             "Stack watermark (words): receiver=%lu decoder=%lu; handlers=%zu",
+             (unsigned long)(arg->receiver_task_handle_ ? uxTaskGetStackHighWaterMark(arg->receiver_task_handle_) : 0),
+             (unsigned long)(arg->decode_task_handle_ ? uxTaskGetStackHighWaterMark(arg->decode_task_handle_) : 0),
+             arg->handlers_.size());
     }
   }
 }
