@@ -42,10 +42,10 @@ void Radio::setup() {
   // Decoder task (heavy frame conversion + handlers)
 #if portNUM_PROCESSORS > 1
   ASSERT_SETUP(xTaskCreatePinnedToCore((TaskFunction_t)this->decode_task, "wmbus_decode",
-                           128 * 1024, this, 18, &(this->decode_task_handle_), 1));
+                           256 * 1024, this, 18, &(this->decode_task_handle_), 1));
 #else
   ASSERT_SETUP(xTaskCreate((TaskFunction_t)this->decode_task, "wmbus_decode",
-                           64 * 1024, this, 18, &(this->decode_task_handle_)));
+                           128 * 1024, this, 18, &(this->decode_task_handle_)));
 #endif
 
   ESP_LOGI(TAG, "Decoder task created [%p]", this->decode_task_handle_);
