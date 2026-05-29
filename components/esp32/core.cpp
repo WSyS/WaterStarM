@@ -12,11 +12,8 @@
 
 #include <hal/cpu_hal.h>
 
-// Enable additional FreeRTOS stack overflow diagnostics
-// (ESPHome/FreeRTOS will call vApplicationStackOverflowHook() when
-// CONFIG_CHECK_FOR_STACK_OVERFLOW is enabled).
-#include <freertos/task.h>
-#include "esphome/core/log.h"
+// (Custom FreeRTOS stack overflow diagnostics removed)
+
 
 
 #ifdef USE_ARDUINO
@@ -72,7 +69,7 @@ void IRAM_ATTR HOT arch_feed_wdt() { esp_task_wdt_reset(); }
 
 // FreeRTOS calls this hook when stack overflow is detected.
 // We log which task caused the overflow to allow targeted stack sizing.
-extern "C" void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
+extern "C" void vApplicationStackOverflowHook_disabled(TaskHandle_t xTask, char *pcTaskName) {
   const char *name = pcTaskName ? pcTaskName : "(null)";
 
   // Minimal immediate output (avoid ESP_LOG + delay in fault context)
@@ -116,7 +113,7 @@ void loop_task(void *pv_params) {
 
 extern "C" void app_main() {
   esp32::setup_preferences();
-  xTaskCreate(loop_task, "loopTask", 262144, nullptr, 1, &loop_task_handle);
+xTaskCreate(loop_task, "loopTask", 32768, nullptr, 1, &loop_task_handle);
 
 
   if (loop_task_handle != nullptr) {
