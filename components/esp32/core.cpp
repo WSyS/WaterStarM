@@ -75,16 +75,14 @@ void IRAM_ATTR HOT arch_feed_wdt() { esp_task_wdt_reset(); }
 extern "C" void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
   const char *name = pcTaskName ? pcTaskName : "(null)";
 
-  // Use normal logging + a short delay so the message has time to reach the host
-  // before the reboot triggered by the overflow recovery.
-  ESP_LOGE("stack_overflow",
-           "vApplicationStackOverflowHook: task_handle=%p name=%s",
-           xTask, name);
+  // Minimal immediate output (avoid ESP_LOG + delay in fault context)
+  // Use esp_rom_printf/printf path to increase chance it reaches UART.
+  printf("[stack_overflow] task=%p name=%s\n", xTask, name);
 
-  delay(250);
-
-  esphome::arch_restart();
+  // Hard restart immediately.
+  esp_restart();
 }
+
 
 
 uint8_t progmem_read_byte(const uint8_t *addr) { return *addr; }
