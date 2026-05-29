@@ -35,6 +35,11 @@ void Radio::setup() {
 #endif
 
   ESP_LOGI(TAG, "Receiver task created [%p]", this->receiver_task_handle_);
+  if (this->receiver_task_handle_ != nullptr) {
+    auto hw = uxTaskGetStackHighWaterMark(this->receiver_task_handle_);
+    ESP_LOGI(TAG, "Receiver task initial stack high-water mark: %lu words",
+             (unsigned long)hw);
+  }
 
   // Decoder task (heavy frame conversion + handlers) must not run in loopTask.
 #if portNUM_PROCESSORS > 1
@@ -46,13 +51,12 @@ void Radio::setup() {
 #endif
 
   ESP_LOGI(TAG, "Decoder task created [%p]", this->decode_task_handle_);
-
-  // Initial stack headroom report for receiver task.
-  if (this->receiver_task_handle_ != nullptr) {
-    auto hw = uxTaskGetStackHighWaterMark(this->receiver_task_handle_);
-    ESP_LOGI(TAG, "Receiver task initial stack high-water mark: %lu words",
+  if (this->decode_task_handle_ != nullptr) {
+    auto hw = uxTaskGetStackHighWaterMark(this->decode_task_handle_);
+    ESP_LOGI(TAG, "Decoder task initial stack high-water mark: %lu words",
              (unsigned long)hw);
   }
+
 
   this->radio->attach_data_interrupt(Radio::wakeup_receiver_task_from_isr,
                                      &(this->receiver_task_handle_));
