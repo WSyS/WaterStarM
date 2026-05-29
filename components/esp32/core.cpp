@@ -48,6 +48,10 @@ void arch_init() {
   // Very early breadcrumb to verify this code path executes before any crash.
   ESP_EARLY_LOGI("startup", "arch_init entered");
 
+  // Force a flush point: if we ever reach this function, we should see this.
+  ESP_LOGI("startup", "arch_init flush");
+
+
   // Enable the task watchdog only on the loop task (from which we're currently running)
 
 #if defined(USE_ESP_IDF)
