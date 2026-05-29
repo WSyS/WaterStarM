@@ -21,8 +21,6 @@ static const char *TAG = "wmbus";
 
 void Radio::setup() {
   ASSERT_SETUP(this->packet_queue_ = xQueueCreate(3, sizeof(Packet *)));
-
-  // Queue for decoder task: Packet* from receiver -> decoder.
   ASSERT_SETUP(this->decode_queue_ = xQueueCreate(3, sizeof(Packet *)));
 
   // High priority receiver to avoid FIFO overflow.
@@ -41,7 +39,7 @@ void Radio::setup() {
              (unsigned long)hw);
   }
 
-  // Decoder task (heavy frame conversion + handlers) must not run in loopTask.
+  // Decoder task (heavy frame conversion + handlers)
 #if portNUM_PROCESSORS > 1
   ASSERT_SETUP(xTaskCreatePinnedToCore((TaskFunction_t)this->decode_task, "wmbus_decode",
                            128 * 1024, this, 18, &(this->decode_task_handle_), 1));
@@ -57,10 +55,26 @@ void Radio::setup() {
              (unsigned long)hw);
   }
 
+  // Only attach IRQ after tasks exist.
+  if (this->receiver_task_handle_ == nullptr) {
+    ESP_LOGE(TAG, "receiver_task_handle_ is null, not attaching IRQ");
+    return;
+  }
 
+  ESP_LOGI(TAG, "Attaching CC1101 IRQ to wake receiver task");
   this->radio->attach_data_interrupt(Radio::wakeup_receiver_task_from_isr,
                                      &(this->receiver_task_handle_));
 }
+
+void Radio::wakeup_receiver_task_from_isr(TaskHandle_t *arg) {
+  if (arg == nullptr || *arg == nullptr)
+    return;
+
+  BaseType_t xHigherPriorityTaskWoken;
+  vTaskNotifyGiveFromISR(*arg, &xHigherPriorityTaskWoken);
+  portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+}
+
 
 
 void Radio::loop() {
