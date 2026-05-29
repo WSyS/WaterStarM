@@ -21,45 +21,19 @@ static const char *TAG = "wmbus";
 
 void Radio::setup() {
   ASSERT_SETUP(this->packet_queue_ = xQueueCreate(3, sizeof(Packet *)));
-  ASSERT_SETUP(this->decode_queue_ = xQueueCreate(3, sizeof(Packet *)));
 
-  // High priority receiver to avoid FIFO overflow.
+  // High priority to avoid FIFO overflow (fills in 5.12ms at 100kbps).
+  // Pin to core 1 on dual-core to avoid WiFi ISR preemption on core 0.
 #if portNUM_PROCESSORS > 1
   ASSERT_SETUP(xTaskCreatePinnedToCore((TaskFunction_t)this->receiver_task, "radio_recv",
-                           128 * 1024, this, 24, &(this->receiver_task_handle_), 1));
+                           64 * 1024, this, 24, &(this->receiver_task_handle_), 1));
 #else
   ASSERT_SETUP(xTaskCreate((TaskFunction_t)this->receiver_task, "radio_recv",
-                           96 * 1024, this, 24, &(this->receiver_task_handle_)));
+                           16 * 1024, this, 24, &(this->receiver_task_handle_)));
 #endif
 
-  // Avoid stack/high-watermark logging during experiments.
-  // It may allocate/format in tight startup paths.
   ESP_LOGI(TAG, "Receiver task created [%p]", this->receiver_task_handle_);
 
-
-  // Decoder task (heavy frame conversion + handlers)
-#if portNUM_PROCESSORS > 1
-  ASSERT_SETUP(xTaskCreatePinnedToCore((TaskFunction_t)this->decode_task, "wmbus_decode",
-                           256 * 1024, this, 18, &(this->decode_task_handle_), 1));
-#else
-  ASSERT_SETUP(xTaskCreate((TaskFunction_t)this->decode_task, "wmbus_decode",
-                           128 * 1024, this, 18, &(this->decode_task_handle_)));
-#endif
-
-  ESP_LOGI(TAG, "Decoder task created [%p]", this->decode_task_handle_);
-  if (this->decode_task_handle_ != nullptr) {
-    auto hw = uxTaskGetStackHighWaterMark(this->decode_task_handle_);
-    ESP_LOGI(TAG, "Decoder task initial stack high-water mark: %lu words",
-             (unsigned long)hw);
-  }
-
-  // Only attach IRQ after tasks exist.
-  if (this->receiver_task_handle_ == nullptr) {
-    ESP_LOGE(TAG, "receiver_task_handle_ is null, not attaching IRQ");
-    return;
-  }
-
-  ESP_LOGI(TAG, "Attaching CC1101 IRQ to wake receiver task");
   this->radio->attach_data_interrupt(Radio::wakeup_receiver_task_from_isr,
                                      &(this->receiver_task_handle_));
 }
@@ -74,54 +48,23 @@ void Radio::wakeup_receiver_task_from_isr(TaskHandle_t *arg) {
 }
 
 void Radio::loop() {
-  // Decoding/handler execution is handled exclusively in decode_task().
-  // Keep this loop empty to avoid any potential double-ownership between
-  // loopTask and the dedicated FreeRTOS tasks.
+  Packet *p;
+  if (xQueueReceive(this->packet_queue_, &p, 0) != pdPASS)
+    return;
+
+  auto frame = p->convert_to_frame();
+  delete p;
+
+  if (!frame)
+    return;
+
+  ESP_LOGV(TAG, "Have data (%zu bytes) [RSSI: %ddBm, mode: %s %s]",
+           frame->data().size(), frame->rssi(), toString(frame->link_mode()),
+           frame->format().c_str());
+
+  for (auto &handler : this->handlers_)
+    handler(&frame.value());
 }
-
-
-
-void Radio::decode_task(Radio *arg) {
-  // Periodic stack watermark logging to identify which task overflows.
-  // Log quickly so we can see where we are right before/at the crash.
-  uint32_t last_log_ms = 0;
-
-  while (true) {
-    Packet *p = nullptr;
-    if (xQueueReceive(arg->decode_queue_, &p, portMAX_DELAY) != pdPASS)
-      continue;
-
-    if (p == nullptr)
-      continue;
-
-    auto frame = p->convert_to_frame();
-    delete p;
-
-    if (!frame)
-      continue;
-
-    for (auto &handler : arg->handlers_)
-      handler(&frame.value());
-
-    const uint32_t now_ms = millis();
-    if (now_ms - last_log_ms > 5000) {
-      last_log_ms = now_ms;
-    // Keep this log, but avoid the extra stack/memory pressure from calling
-    // uxTaskGetStackHighWaterMark repeatedly inside deep decoder contexts.
-    if (arg->decode_task_handle_ != nullptr) {
-      auto rx_hw = (arg->receiver_task_handle_ ? uxTaskGetStackHighWaterMark(arg->receiver_task_handle_) : 0);
-      auto dec_hw = uxTaskGetStackHighWaterMark(arg->decode_task_handle_);
-      ESP_LOGW(TAG,
-               "Stack watermark (words): receiver=%lu decoder=%lu; handlers=%zu",
-               (unsigned long)rx_hw, (unsigned long)dec_hw, arg->handlers_.size());
-    }
-    }
-  }
-}
-
-
-
-
 
 void Radio::receive_frame() {
   if (!ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(60000))) {
