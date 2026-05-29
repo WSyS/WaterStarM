@@ -43,6 +43,8 @@ void arch_restart() {
 
 void arch_init() {
   // Very early breadcrumb to verify this code path executes before any crash.
+  // Raw printf to maximize chance it appears even if logging/alloc paths are unstable.
+  printf("[boot_marker] arch_init\n");
   ESP_EARLY_LOGI("startup", "arch_init entered");
 
   // Force a flush point: if we ever reach this function, we should see this.
