@@ -57,8 +57,12 @@ void Radio::loop() {
 
   auto frame = p->convert_to_frame();
 
+  // Packet ownership: p is allocated in receiver_task() and must be freed here.
+  delete p;
+
   if (!frame)
     return;
+
 
   ESP_LOGV(TAG, "Have data (%zu bytes) [RSSI: %ddBm, mode: %s %s]",
            frame->data().size(), frame->rssi(), toString(frame->link_mode()),

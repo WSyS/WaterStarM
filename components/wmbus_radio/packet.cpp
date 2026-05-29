@@ -132,9 +132,8 @@ std::optional<Frame> Packet::convert_to_frame() {
       FrameStatus::FullFrame))
     frame.emplace(this);
 
-  delete this;
-
   return frame;
+
 }
 
 Frame::Frame(Packet *packet)
