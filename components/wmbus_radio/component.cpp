@@ -78,6 +78,9 @@ void Radio::wakeup_receiver_task_from_isr(TaskHandle_t *arg) {
 }
 
 void Radio::decode_task(Radio *arg) {
+  // Periodic stack watermark logging to identify which task overflows.
+  uint32_t last_log_ms = 0;
+
   while (true) {
     Packet *p = nullptr;
     if (xQueueReceive(arg->decode_queue_, &p, portMAX_DELAY) != pdPASS)
@@ -89,15 +92,25 @@ void Radio::decode_task(Radio *arg) {
     auto frame = p->convert_to_frame();
     delete p;
 
-
-
     if (!frame)
       continue;
 
     for (auto &handler : arg->handlers_)
       handler(&frame.value());
+
+    const uint32_t now_ms = millis();
+    if (now_ms - last_log_ms > 5000) {
+      last_log_ms = now_ms;
+      if (arg->decode_task_handle_ != nullptr) {
+        auto hw = uxTaskGetStackHighWaterMark(arg->decode_task_handle_);
+        ESP_LOGW(TAG,
+                 "Decoder stack high-water mark: %lu words; handlers=%zu",
+                 (unsigned long)hw, arg->handlers_.size());
+      }
+    }
   }
 }
+
 
 
 
