@@ -29,12 +29,20 @@ public:
 protected:
   static void wakeup_receiver_task_from_isr(TaskHandle_t *arg);
   static void receiver_task(Radio *arg);
+  static void decode_task(Radio *arg);
 
   RadioTransceiver *radio{nullptr};
+
+  // Receiver reads bytes from the CC1101 FIFO and builds Packet objects.
   TaskHandle_t receiver_task_handle_{nullptr};
   QueueHandle_t packet_queue_{nullptr};
+
+  // Decoder converts Packet -> Frame and executes registered Frame handlers.
+  TaskHandle_t decode_task_handle_{nullptr};
+  QueueHandle_t decode_queue_{nullptr};
 
   std::vector<std::function<void(Frame *)>> handlers_;
 };
 } // namespace wmbus_radio
 } // namespace esphome
+

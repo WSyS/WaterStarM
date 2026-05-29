@@ -22,11 +22,13 @@ static const char *TAG = "wmbus";
 void Radio::setup() {
   ASSERT_SETUP(this->packet_queue_ = xQueueCreate(3, sizeof(Packet *)));
 
-  // High priority to avoid FIFO overflow (fills in 5.12ms at 100kbps).
-  // Pin to core 1 on dual-core to avoid WiFi ISR preemption on core 0.
+  // Queue for decoder task: Packet* from receiver -> decoder.
+  ASSERT_SETUP(this->decode_queue_ = xQueueCreate(3, sizeof(Packet *)));
+
+  // High priority receiver to avoid FIFO overflow.
 #if portNUM_PROCESSORS > 1
   ASSERT_SETUP(xTaskCreatePinnedToCore((TaskFunction_t)this->receiver_task, "radio_recv",
-                           96 * 1024, this, 24, &(this->receiver_task_handle_), 1));
+                           128 * 1024, this, 24, &(this->receiver_task_handle_), 1));
 #else
   ASSERT_SETUP(xTaskCreate((TaskFunction_t)this->receiver_task, "radio_recv",
                            96 * 1024, this, 24, &(this->receiver_task_handle_)));
@@ -34,66 +36,67 @@ void Radio::setup() {
 
   ESP_LOGI(TAG, "Receiver task created [%p]", this->receiver_task_handle_);
 
-  // Initial stack headroom report (bytes remaining).
-  // High watermark decreases over time; overflow occurs when it hits ~0.
+  // Decoder task (heavy frame conversion + handlers) must not run in loopTask.
+#if portNUM_PROCESSORS > 1
+  ASSERT_SETUP(xTaskCreatePinnedToCore((TaskFunction_t)this->decode_task, "wmbus_decode",
+                           128 * 1024, this, 18, &(this->decode_task_handle_), 1));
+#else
+  ASSERT_SETUP(xTaskCreate((TaskFunction_t)this->decode_task, "wmbus_decode",
+                           64 * 1024, this, 18, &(this->decode_task_handle_)));
+#endif
+
+  ESP_LOGI(TAG, "Decoder task created [%p]", this->decode_task_handle_);
+
+  // Initial stack headroom report for receiver task.
   if (this->receiver_task_handle_ != nullptr) {
     auto hw = uxTaskGetStackHighWaterMark(this->receiver_task_handle_);
     ESP_LOGI(TAG, "Receiver task initial stack high-water mark: %lu words",
              (unsigned long)hw);
   }
 
-
   this->radio->attach_data_interrupt(Radio::wakeup_receiver_task_from_isr,
                                      &(this->receiver_task_handle_));
 }
 
+
 void Radio::loop() {
-  Packet *p;
-  if (xQueueReceive(this->packet_queue_, &p, 0) != pdPASS)
-    return;
-
-  // ESP_LOGI(TAG, "Have RAW data from radio (%zu bytes)",
-  //          p->calculate_payload_size());
-
-  auto frame = p->convert_to_frame();
-
-  // Packet ownership: p is allocated in receiver_task() and must be freed here.
-  delete p;
-
-  if (!frame)
-    return;
-
-
-  ESP_LOGV(TAG, "Have data (%zu bytes) [RSSI: %ddBm, mode: %s %s]",
-           frame->data().size(), frame->rssi(), toString(frame->link_mode()),
-           frame->format().c_str());
-
-  uint8_t packet_handled = 0;
-  for (auto &handler : this->handlers_)
-    handler(&frame.value());
-
-  if (frame->handlers_count())
-    ESP_LOGV(TAG, "Telegram handled by %d handlers", frame->handlers_count());
-  else {
-    ESP_LOGW(TAG, "Telegram not handled by any handler");
-    Telegram t;
-    if (t.parseHeader(frame->data()) && t.addresses.empty()) {
-      ESP_LOGW(TAG, "Check if telegram can be parsed on:");
-    } else {
-      ESP_LOGW(TAG, "Check if telegram with address %s can be parsed on:",
-               t.addresses.back().id.c_str());
-    }
-    ESP_LOGW(TAG,
-             (std::string{"https://wmbusmeters.org/analyze/"} + frame->as_hex())
-                 .c_str());
-  }
+  // Decoding/handler execution is handled exclusively in decode_task().
+  // Keep this loop empty to avoid any potential double-ownership between
+  // loopTask and the dedicated FreeRTOS tasks.
 }
+
+
 
 void Radio::wakeup_receiver_task_from_isr(TaskHandle_t *arg) {
   BaseType_t xHigherPriorityTaskWoken;
   vTaskNotifyGiveFromISR(*arg, &xHigherPriorityTaskWoken);
   portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
+
+void Radio::decode_task(Radio *arg) {
+  while (true) {
+    Packet *p = nullptr;
+    if (xQueueReceive(arg->decode_queue_, &p, portMAX_DELAY) != pdPASS)
+      continue;
+
+    if (p == nullptr)
+      continue;
+
+    auto frame = p->convert_to_frame();
+    delete p;
+
+
+
+    if (!frame)
+      continue;
+
+    for (auto &handler : arg->handlers_)
+      handler(&frame.value());
+  }
+}
+
+
+
 
 void Radio::receive_frame() {
   if (!ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(60000))) {
@@ -135,21 +138,12 @@ void Radio::receive_frame() {
 }
 
 void Radio::receiver_task(Radio *arg) {
-  uint32_t last_log_ms = 0;
-  while (true) {
-    arg->receive_frame();
-
-    // Periodic stack headroom report to identify the shrinking headroom.
-    // This runs in the receiver task itself.
-    uint32_t now = millis();
-    if (arg->receiver_task_handle_ != nullptr && (now - last_log_ms) > 5000) {
-      last_log_ms = now;
-      auto hw = uxTaskGetStackHighWaterMark(arg->receiver_task_handle_);
-      ESP_LOGI(TAG, "Receiver task stack high-water mark: %lu words",
-               (unsigned long)hw);
-    }
-  }
+  // Temporary isolation: disable radio reception to determine whether
+  // this component is responsible for the previous-boot stack overflow.
+  while (true)
+    vTaskDelay(pdMS_TO_TICKS(1000));
 }
+
 
 
 void Radio::add_frame_handler(std::function<void(Frame *)> &&callback) {

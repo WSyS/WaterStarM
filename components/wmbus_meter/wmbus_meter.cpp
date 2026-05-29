@@ -16,10 +16,12 @@ void Meter::set_meter_params(std::string id, std::string driver,
     this->link_modes_.addLinkMode(linkMode);
 }
 void Meter::set_radio(wmbus_radio::Radio *radio) {
+  // Temporary isolation: do not register any frame handler.
+  // If the stack overflow/crash disappears, the fault is inside
+  // telegram handling/parsing.
   this->radio = radio;
-  radio->add_frame_handler(
-      [this](wmbus_radio::Frame *frame) { return this->handle_frame(frame); });
 }
+
 void Meter::dump_config() {
   std::string id = this->get_id();
   std::string driver = this->get_driver();
